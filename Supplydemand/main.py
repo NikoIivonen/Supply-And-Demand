@@ -11,6 +11,7 @@ font = pygame.font.SysFont("Arial", 20, True)
 font_time = pygame.font.SysFont("Arial", 40, True)
 
 lowest_price = 10
+highest_quality = 10
 
 img_shop = pygame.image.load("shop.png").convert_alpha()
 img_customer = pygame.image.load("customer.png").convert_alpha()
@@ -25,11 +26,11 @@ def r(m):
     return randint(0, m)
 
 def get_time(d, h, m):
-    global lowest_price
+    global lowest_price, highest_quality
     hour = h
     mins = m
     day = d
-    mins += 0.8
+    mins += 1.5
     if mins >= 60:
         mins = 0
         hour += 1
@@ -45,11 +46,12 @@ def get_time(d, h, m):
             c.choose_shop()
 
         lowest_price = sorted(shops, key=lambda s: s.price)[0].price
+        highest_quality = sorted(shops, key=lambda s: s.quality)[-1].quality
         for s in shops:
             s.pay()
             s.change_price()
 
-        if day >= 8:
+        if day >= 15:
             day = 1
             new_gen()
             print(len(shops), len(houses), len(customers))
@@ -72,7 +74,7 @@ class Customer:
         self.cheapest = None
         self.need = 1
         self.satisfied = False
-        self.speed = 100
+        self.speed = 30
         self.max_price = randint(7, 20)
 
     def pay(self):
@@ -89,7 +91,7 @@ class Customer:
     def choose_shop(self):
         max_dist = 1100/( sqrt(max(self.money, 0.01))*0.1 )
         shops_in_range = [ s for s in shops if dist(self.home.x, s.x, self.home.y, s.y) <= max_dist and s.price <= self.max_price ]
-        cheapest = sorted( shops_in_range, key=lambda s: (s.price, dist(self.home.x, s.x, self.home.y, s.y)))
+        cheapest = sorted( shops_in_range, key=lambda s: (s.price - s.quality, dist(self.home.x, s.x, self.home.y, s.y)))
         if len(cheapest) == 0:
             self.cheapest = None
             self.satisfied = True
@@ -106,7 +108,10 @@ class Customer:
 
             if dist(self.x, self.cheapest.x, self.y, self.cheapest.y) <= 5:
                 can_spend = max(self.money - self.costs, 0)
-                can_buy = floor(can_spend / self.cheapest.price)
+                try:
+                    can_buy = floor(can_spend / self.cheapest.price)
+                except:
+                    print(self.cheapest.price, self.cheapest.cost_per_item, self.cheapest.quality, self.cheapest.min_price)
                 amount = min(can_buy, self.need)
                 self.money -= amount * self.cheapest.price
                 self.cheapest.money_gotten += amount * self.cheapest.price
@@ -148,24 +153,40 @@ class Shop:
         self.money_gotten = 0
         self.sold = 0
         self.weights = [uniform(-1, 1), uniform(-1, 1), uniform(-1, 1), uniform(-1, 1), uniform(-1, 1)]
+        self.weights1 = [uniform(-1, 1), uniform(-1, 1), uniform(-1, 1), uniform(-1, 1), uniform(-1, 1)]
         self.total_profit = 0
         self.min_price = self.cost_per_item + 1
+        self.quality = 10
 
     def change_price(self):
-        data = [self.profit_yd, self.costs, self.cost_per_item, self.price, lowest_price]
+        data = [self.profit_yd, self.costs, self.price-self.cost_per_item, lowest_price, highest_quality]
         total = 0
         for i, d in enumerate(data):
             total += self.weights[i]*d
 
         output = tanh(total)
         change = round(output*100,2)/100
-        print([ float(f"{w:.3f}") for w in self.weights ], " | ", output)
+        # print([ float(f"{w:.3f}") for w in self.weights ], " | ", total, " | ", output)
         self.price += change
+
+        total = 0
+        for i, d in enumerate(data):
+            total += self.weights1[i]*d
+
+        output = tanh(total)
+        change = round(output*100,2)/100
+        # print([ float(f"{w:.3f}") for w in self.weights ], " | ", total, " | ", output)
+        if self.quality > 1:
+            self.quality += change
+            self.quality = max(1, self.quality)
+            self.cost_per_item += change / 2
+            self.min_price = self.cost_per_item + 1
+        self.price = max(self.price, self.min_price)
 
     def draw(self):
         screen.blit(img_shop, (self.x, self.y))
 
-        text = font.render(f"${self.price:.2f}|${self.cost_per_item:.2f}|${self.costs:.2f}", True, (0, 0, 0))
+        text = font.render(f"${self.price:.2f} | {self.quality:.2f} | ${self.cost_per_item:.2f} | ${self.costs:.2f}", True, (0, 0, 0))
         screen.blit(text, (self.x, self.y + 40))
         text = font.render(f"${self.total_profit:.2f}", True, (0, 0, 0))
         screen.blit(text, (self.x, self.y + 60))
@@ -176,9 +197,9 @@ class Shop:
         self.sold = 0
         self.total_profit += self.profit_yd
 
-    def children(self):
+    def children(self, n):
         childs = []
-        for _ in range(3):
+        for _ in range(n):
             new_weights = [ w*uniform(0.9, 1.1)*sign() for w in self.weights ]
             child = Shop(r(1100), r(900))
             child.weights = new_weights
@@ -208,7 +229,7 @@ def new_gen():
     best = sorted( shops, key=lambda s: s.total_profit, reverse=True)[:2]
     shops.clear()
     for b in best:
-        shops += b.children()
+        shops += b.children(3)
     houses = [House(r(1100), r(900)) for _ in range(100)]
     customers = [Customer(c) for c in range(100)]
     overlap()
