@@ -147,7 +147,7 @@ class Shop:
         self.shop = pygame.Rect(self.x, self.y, 100, 100)
         self.profit_yd = 0
         self.cost_per_item = randint(3, 6)
-        self.costs = randint(50, 100)
+        self.costs = randint(25, 50)
         self.price = 10
         self.color = (139, 69, 19)
         self.money_gotten = 0
@@ -168,6 +168,7 @@ class Shop:
         change = round(output*100,2)/100
         # print([ float(f"{w:.3f}") for w in self.weights ], " | ", total, " | ", output)
         self.price += change
+        print(change)
 
         total = 0
         for i, d in enumerate(data):
@@ -181,7 +182,10 @@ class Shop:
             self.quality = max(1, self.quality)
             self.cost_per_item += change / 2
             self.min_price = self.cost_per_item + 1
+
+        self.min_price = max(1, self.min_price)
         self.price = max(self.price, self.min_price)
+        self.cost_per_item = max(self.cost_per_item, 1)
 
     def draw(self):
         screen.blit(img_shop, (self.x, self.y))
